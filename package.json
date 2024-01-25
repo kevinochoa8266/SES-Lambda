@@ -1,0 +1,16 @@
+{
+  "name": "lambda-ses",
+  "version": "1.0.0",
+  "description": "lambda for aws ses",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-sts": "^3.490.0",
+    "aws-sdk": "^2.1525.0",
+    "lambda-multipart-parser": "^1.0.1"
+  }
+}
