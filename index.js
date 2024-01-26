@@ -1,14 +1,20 @@
-import { S3, SES } from "aws-sdk";
-import { parse } from "lambda-multipart-parser";
-import { STSClient, GetSessionTokenCommand } from "@aws-sdk/client-sts";
+const { S3, SES } = require("aws-sdk");
+const { parse } = require("lambda-multipart-parser");
+const { STSClient, GetSessionTokenCommand } = require("@aws-sdk/client-sts");
 
 const DURATION_SECONDS = 129600;
 const RECEIVER_EMAIL = "kevinochoa8266@gmail.com";
 const SENDER_EMAIL = "kevinochoa8266@gmail.com";
 
-export const handler = async (event) => {
+exports.handler = async function (event) {
   // Fetch STS credentials to grant presigned URLs a lifetime of 36 hours.
-  const sts = new STSClient({ region: "us-east-1" });
+  const sts = new STSClient({
+    region: "us-east-1",
+    credentials: {
+      accessKeyId: process.env.ACCESS_KEY_ID,
+      secretAccessKey: process.env.SECRET_ACCESS_KEY,
+    },
+  });
 
   const command = new GetSessionTokenCommand({
     DurationSeconds: DURATION_SECONDS,
@@ -21,25 +27,32 @@ export const handler = async (event) => {
   }
   console.log("this is the response from await sts:", response);
   const credentials = response.Credentials;
+  
+  const ACCESS_KEY = credentials.AccessKeyId;
+  const SECRET_KEY = credentials.SecretAccessKey;
+  const SESSION_TOKEN = credentials.SessionToken;
 
+  // Create an S3 client using the assumed role credentials
   const s3 = new S3({
-    credentials: credentials,
+    accessKeyId: ACCESS_KEY,
+    secretAccessKey: SECRET_KEY,
+    sessionToken: SESSION_TOKEN,
   });
-  let eventResult;
-  try{
-    eventResult = await parse(event);
 
-  } catch(error) {
+  let eventResult;
+  try {
+    eventResult = await parse(event);
+  } catch (error) {
     console.error("failed to parse the event", error);
   }
   console.log("this is the parsed event", eventResult);
 
-  const customerName = result["name"];
+  const customerName = eventResult["name"];
   const bucketName = "precise-printing-customer-art";
   const preSignedUrls = [];
   let uploadResult;
 
-  for (const file of result["files"]) {
+  for (const file of eventResult["files"]) {
     const params = {
       Bucket: bucketName,
       Key: `${customerName}/${file.filename}`,
@@ -52,10 +65,8 @@ export const handler = async (event) => {
       Expires: 129600,
     };
 
-
     try {
       uploadResult = await s3.upload(params).promise();
-
     } catch (error) {
       console.error("this is an error uploading to s3", error);
     }
@@ -67,8 +78,7 @@ export const handler = async (event) => {
   }
   let resp;
   try {
-    
-    resp = await sendEmail(result, preSignedUrls);
+    resp = await sendEmail(eventResult, preSignedUrls);
   } catch (error) {
     console.error("error sending email", error);
   }
