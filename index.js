@@ -6,6 +6,8 @@ const DURATION_SECONDS = 129600;
 const RECEIVER_EMAIL = "kevinochoa8266@gmail.com";
 const SENDER_EMAIL = "kevinochoa8266@gmail.com";
 const BUCKET_NAME = "precise-printing-customer-art";
+const ERROR_MSG =
+  "An error occurred while sending the email, please try again or email Precise Printing directly at PrecisePrintingCorp@gmail.com.";
 
 exports.handler = async function (event) {
   let eventResult;
@@ -13,10 +15,15 @@ exports.handler = async function (event) {
   try {
     eventResult = await parse(event);
   } catch (error) {
-    console.error("Failed to parse the incoming event", error);
+    console.error("Failed to parse the incoming event: ", error);
+    return createErrorResponse(ERROR_MSG);
   }
 
-  if (eventResult.files.length() > 0) {
+  const customerName = eventResult["name"];
+  const preSignedUrls = [];
+
+  if (eventResult.files.length > 0) {
+
     // Fetch STS credentials to grant presigned URLs a longer lifetime.
     const sts = new STSClient({
       region: "us-east-1",
@@ -30,74 +37,64 @@ exports.handler = async function (event) {
       DurationSeconds: DURATION_SECONDS,
     });
 
-    let response;
+    let sts_response;
+
     try {
-      response = await sts.send(command);
+      sts_response = await sts.send(command);
     } catch (error) {
-      console.error("This is an error from sts", error);
+      console.error("Failed to create STS credentials: ", error);
+      return createErrorResponse(ERROR_MSG);
     }
-    console.log("this is the response from await sts:", response);
-    const credentials = response.Credentials;
+
+    const credentials = sts_response.Credentials;
 
     const ACCESS_KEY = credentials.AccessKeyId;
     const SECRET_KEY = credentials.SecretAccessKey;
     const SESSION_TOKEN = credentials.SessionToken;
 
-    // Create an S3 client using the assumed role credentials
+    // Create an S3 client using the assumed role credentials.
     const s3 = new S3({
       accessKeyId: ACCESS_KEY,
       secretAccessKey: SECRET_KEY,
       sessionToken: SESSION_TOKEN,
     });
 
-    let uploadResult;
 
     for (const file of eventResult["files"]) {
-      const params = {
+      // Params to create folder in s3 bucket with customer name.
+      const bucket_params = {
         Bucket: BUCKET_NAME,
         Key: `${customerName}/${file.filename}`,
         Body: file.content,
       };
 
+      try {
+        await s3.upload(bucket_params).promise();
+      } catch (error) {
+        console.error("Error uploading file to s3: ", error);
+        return createErrorResponse(ERROR_MSG);
+      }
+
+      // Params to create the sharable Presigned URL.
       const urlParams = {
         Bucket: BUCKET_NAME,
         Key: `${customerName}/${file.filename}`,
         Expires: 129600,
       };
-
-      try {
-        uploadResult = await s3.upload(params).promise();
-      } catch (error) {
-        console.error("this is an error uploading to s3", error);
-      }
-
-      console.log("File uploaded to S3:", uploadResult);
-
+      
       const url = s3.getSignedUrl("getObject", urlParams);
       preSignedUrls.push(url);
     }
   }
 
-
-  const customerName = eventResult["name"];
-  const preSignedUrls = [];
-
-  
-  let resp;
   try {
-    resp = await sendEmail(eventResult, preSignedUrls);
+    await sendEmail(eventResult, preSignedUrls);
   } catch (error) {
-    console.error("error sending email", error);
+    console.error("Unable to send email.", error);
+    return createErrorResponse(ERROR_MSG);
   }
-  console.log("this is the sendEmail resp", resp);
-  return {
-    statusCode: 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-    body: JSON.stringify({ message: "Email sent successfully." }),
-  };
+
+  return createSuccessResponse("Email was successfully sent.");
 };
 
 async function sendEmail(result, urls) {
@@ -155,16 +152,11 @@ async function sendEmail(result, urls) {
 
   }
 
- 
-
-  let emailPromise;
   try {
-    emailPromise = await ses.sendEmail(params).promise();
+    await ses.sendEmail(params).promise();
   } catch (error) {
-    console.error("this is the send email error", error);
+    console.error("Failed to send email.", error);
   }
-
-  console.log("this is the emailPromise", emailPromise);
 }
 
 function buildEmailContentWithAttachments(result, attachmentBody) {
@@ -189,4 +181,26 @@ function buildEmailContent(result) {
     "\nMessage:\n" +
     result["message"]
   );
+}
+
+function createErrorResponse(errorMessage) {
+  return {
+    statusCode: 500,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body: JSON.stringify({ message: errorMessage }),
+  };
+}
+
+function createSuccessResponse(successMessage) {
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body: JSON.stringify({ message: successMessage }),
+  };
 }
