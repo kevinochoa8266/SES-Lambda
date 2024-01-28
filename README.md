@@ -1,4 +1,5 @@
 # Contact Form Using AWS SES
+![awsses](https://github.com/kevinochoa8266/SES-Lambda/assets/92874719/d830a88a-ec55-4e70-9796-84807cb1f902)
 ## Description
 This project includes a JavaScript Lambda function triggered by an API Gateway request whenever a user fills out a website's contact form. The Lambda function processes the request, storing any user uploads or attachments in an S3 bucket. It then uses AWS SES to create email parameters and sends an email to the website owner with the contact form information. Attachments are included in the email as pre-signed URL links, valid for up to 36 hours. This method enhances security and reduces the SES cost by avoiding direct attachment sending.
 
