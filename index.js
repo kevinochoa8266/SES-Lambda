@@ -3,11 +3,11 @@ const { parse } = require("lambda-multipart-parser");
 const { STSClient, GetSessionTokenCommand } = require("@aws-sdk/client-sts");
 
 const DURATION_SECONDS = 129600;
-const RECEIVER_EMAIL = "kevinochoa8266@gmail.com";
-const SENDER_EMAIL = "kevinochoa8266@gmail.com";
-const BUCKET_NAME = "precise-printing-customer-art";
+const RECEIVER_EMAIL = "test@test.com";
+const SENDER_EMAIL = "test@test.com";
+const BUCKET_NAME = "test-bucket";
 const ERROR_MSG =
-  "An error occurred while sending the email, please try again or email Precise Printing directly at PrecisePrintingCorp@gmail.com.";
+  "An error occurred while sending the email, please try again or email ABC Company directly at test@company.com.";
 
 exports.handler = async function (event) {
   let eventResult;
@@ -101,7 +101,7 @@ async function sendEmail(result, urls) {
   const ses = new SES();
   let params;
 
-  if (urls.length() > 0 ) {
+  if (urls.length > 0 ) {
     // Format all of the urls in the attachment body.
     let attachmentBody = "";
     for (let i = 0; i < urls.length; i++) {
@@ -121,7 +121,7 @@ async function sendEmail(result, urls) {
           },
         },
         Subject: {
-          Data: "Precise Printing Contact Form: " + result["name"],
+          Data: "Test Company Contact Form: " + result["name"],
           Charset: "UTF-8",
         },
       },
@@ -142,7 +142,7 @@ async function sendEmail(result, urls) {
           },
         },
         Subject: {
-          Data: "Precise Printing Contact Form: " + result["name"],
+          Data: "Test Company Contact Form: " + result["name"],
           Charset: "UTF-8",
         },
       },
