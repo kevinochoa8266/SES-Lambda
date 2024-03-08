@@ -3,27 +3,24 @@ const { parse } = require("lambda-multipart-parser");
 const { STSClient, GetSessionTokenCommand } = require("@aws-sdk/client-sts");
 
 const DURATION_SECONDS = 129600;
-const RECEIVER_EMAIL = "test@test.com";
-const SENDER_EMAIL = "test@test.com";
-const BUCKET_NAME = "test-bucket";
-const ERROR_MSG =
-  "An error occurred while sending the email, please try again or email ABC Company directly at test@company.com.";
+const RECEIVER_EMAIL = "kevinochoa8266@gmail.com";
+const SENDER_EMAIL = "kevinochoa8266@gmail.com";
+const BUCKET_NAME = "precise-printing-customer-art";
 
 exports.handler = async function (event) {
   let eventResult;
-  
+
   try {
     eventResult = await parse(event);
   } catch (error) {
     console.error("Failed to parse the incoming event: ", error);
-    return createErrorResponse(ERROR_MSG);
+    throw error;
   }
 
   const customerName = eventResult["name"];
   const preSignedUrls = [];
 
   if (eventResult.files.length > 0) {
-
     // Fetch STS credentials to grant presigned URLs a longer lifetime.
     const sts = new STSClient({
       region: "us-east-1",
@@ -43,7 +40,7 @@ exports.handler = async function (event) {
       sts_response = await sts.send(command);
     } catch (error) {
       console.error("Failed to create STS credentials: ", error);
-      return createErrorResponse(ERROR_MSG);
+      throw error;
     }
 
     const credentials = sts_response.Credentials;
@@ -59,7 +56,6 @@ exports.handler = async function (event) {
       sessionToken: SESSION_TOKEN,
     });
 
-
     for (const file of eventResult["files"]) {
       // Params to create folder in s3 bucket with customer name.
       const bucket_params = {
@@ -72,7 +68,7 @@ exports.handler = async function (event) {
         await s3.upload(bucket_params).promise();
       } catch (error) {
         console.error("Error uploading file to s3: ", error);
-        return createErrorResponse(ERROR_MSG);
+        throw error;
       }
 
       // Params to create the sharable Presigned URL.
@@ -81,7 +77,7 @@ exports.handler = async function (event) {
         Key: `${customerName}/${file.filename}`,
         Expires: 129600,
       };
-      
+
       const url = s3.getSignedUrl("getObject", urlParams);
       preSignedUrls.push(url);
     }
@@ -90,8 +86,8 @@ exports.handler = async function (event) {
   try {
     await sendEmail(eventResult, preSignedUrls);
   } catch (error) {
-    console.error("Unable to send email.", error);
-    return createErrorResponse(ERROR_MSG);
+    console.error("Unable to send email: ", error);
+    throw error
   }
 
   return createSuccessResponse("Email was successfully sent.");
@@ -101,7 +97,7 @@ async function sendEmail(result, urls) {
   const ses = new SES();
   let params;
 
-  if (urls.length > 0 ) {
+  if (urls.length > 0) {
     // Format all of the urls in the attachment body.
     let attachmentBody = "";
     for (let i = 0; i < urls.length; i++) {
@@ -121,7 +117,7 @@ async function sendEmail(result, urls) {
           },
         },
         Subject: {
-          Data: "Test Company Contact Form: " + result["name"],
+          Data: "Precise Printing Contact Form: " + result["name"],
           Charset: "UTF-8",
         },
       },
@@ -142,20 +138,20 @@ async function sendEmail(result, urls) {
           },
         },
         Subject: {
-          Data: "Test Company Contact Form: " + result["name"],
+          Data: "Precise Printing Contact Form: " + result["name"],
           Charset: "UTF-8",
         },
       },
       Source: SENDER_EMAIL,
       ReplyToAddresses: [result["email"]],
     };
-
   }
 
   try {
     await ses.sendEmail(params).promise();
   } catch (error) {
     console.error("Failed to send email.", error);
+    throw error;
   }
 }
 
@@ -181,17 +177,6 @@ function buildEmailContent(result) {
     "\nMessage:\n" +
     result["message"]
   );
-}
-
-function createErrorResponse(errorMessage) {
-  return {
-    statusCode: 500,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-    body: JSON.stringify({ message: errorMessage }),
-  };
 }
 
 function createSuccessResponse(successMessage) {
