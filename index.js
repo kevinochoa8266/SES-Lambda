@@ -87,7 +87,7 @@ exports.handler = async function (event) {
     await sendEmail(eventResult, preSignedUrls);
   } catch (error) {
     console.error("Unable to send email: ", error);
-    throw error
+    throw error;
   }
 
   return createSuccessResponse("Email was successfully sent.");
